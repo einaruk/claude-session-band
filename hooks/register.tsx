@@ -648,8 +648,9 @@ export const register: Register = (on, options) => {
     const modelTarget = family === null ? null : MODEL_SWITCH[family]
 
     // Figures on the left (growing to fill the row), buttons pinned to the right edge.
+    // When both do not fit, the buttons wrap to a second row: overlapped by the pills they lose their clicks.
     return (
-      <Box flexDirection="row" justifyContent="space-between">
+      <Box flexDirection="row" flexWrap="wrap" justifyContent="space-between">
         {/*
           One pill per group: gray text with a small colored dot for status.
           Desktop: a faint rounded border; height={1} holds it to one text row, else the desktop pads the border.
