@@ -51,6 +51,10 @@ const compactRefusedAtAtom = atom({ plugin: 'session-band', key: 'compactRefused
 const cavemanAtom = atom({ plugin: 'session-band', key: 'caveman' } as const, null)
 const cavemanResumeAtom = atom({ plugin: 'session-band', key: 'cavemanResume' } as const, 'full')
 const cavemanToldAtom = atom({ plugin: 'session-band', key: 'cavemanTold' } as const, null)
+// The writing-rules toggle's flag file as last read, and whether the model was last told the rules are on.
+const styleAtom = atom({ plugin: 'session-band', key: 'style' } as const, false)
+const styleToldAtom = atom({ plugin: 'session-band', key: 'styleTold' } as const, null)
+const styleAvailableAtom = atom({ plugin: 'session-band', key: 'styleAvailable' } as const, false)
 const modelSeenAtom = atom({ plugin: 'session-band', key: 'modelSeen' } as const, {})
 
 const PANE_ID = 'session-band'
@@ -69,6 +73,9 @@ const HANDOFF_ARGS =
 const SAVE_PROMPT =
   "Update the project's working notes (status, decisions, open items) for the work done in this session. " +
   'Re-read each file right before writing it.'
+
+// Used when no status prompt is configured.
+const STATUS_PROMPT = 'Where do we stand? What is done, where did we leave off, and what is next?'
 
 // Used when the configured handoff command is not installed.
 const HANDOFF_PROMPT = [
@@ -95,6 +102,14 @@ const CAVEMAN_OFF_NOTE =
 const CAVEMAN_ON_NOTE =
   'The user switched caveman mode on with the toggle on the session-band band, the same as typing "/caveman". ' +
   'Follow the caveman rules from this reply on.'
+
+// Sent with every prompt while the writing rules are on: a rule set has to outlive a compaction.
+const STYLE_ON_NOTE =
+  'The writing rules of the session-band toggle are on. They replace caveman mode: ignore any caveman reminder ' +
+  'while they are on. Follow them in every reply until the user switches them off:\n'
+const STYLE_OFF_NOTE =
+  'The user switched the writing rules off with the toggle on the session-band band. ' +
+  'Write in your normal style from this reply on.'
 
 // ---------------------------------------------------------------- view
 
@@ -157,12 +172,22 @@ async function computeView($: EngineInterface, config: KeeperConfig): Promise<Ke
   }
 }
 
-/** Where the caveman plugin keeps its mode flag: under the Claude Code configuration directory. */
-async function cavemanFlagPath($: EngineInterface): Promise<string | null> {
+/** A flag file under the Claude Code configuration directory, shared by every session. */
+async function flagPath($: EngineInterface, name: string): Promise<string | null> {
   const configDir = await $.env.get('CLAUDE_CONFIG_DIR')
-  if (configDir) return `${configDir}/.caveman-active`
+  if (configDir) return `${configDir}/${name}`
   const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
-  return home ? `${home}/.claude/.caveman-active` : null
+  return home ? `${home}/.claude/${name}` : null
+}
+
+/** Where the caveman plugin keeps its mode flag. */
+async function cavemanFlagPath($: EngineInterface): Promise<string | null> {
+  return flagPath($, '.caveman-active')
+}
+
+/** Where the writing-rules toggle keeps its flag: 'on', or empty while off. */
+async function styleFlagPath($: EngineInterface): Promise<string | null> {
+  return flagPath($, '.session-band-style')
 }
 
 /**
@@ -183,12 +208,38 @@ async function refreshCaveman($: EngineInterface): Promise<string> {
   return level
 }
 
+/**
+ * Whether the writing-rules toggle is offered: rules are set and the skill they belong to,
+ * when one is named, is installed.
+ */
+async function refreshStyleAvailable($: EngineInterface, config: KeeperConfig): Promise<boolean> {
+  let isAvailable = config.styleRules !== ''
+  if (isAvailable && config.styleSkill !== '') {
+    const names = (await $.command.list().catch(() => [])).map(command => command.name)
+    isAvailable = names.some(name => name === config.styleSkill || name.endsWith(`:${config.styleSkill}`))
+  }
+  if ((await read($, styleAvailableAtom)) !== isAvailable) await update($, styleAvailableAtom, () => isAvailable)
+  return isAvailable
+}
+
+/** Reads the writing-rules flag into state. A missing or unreadable flag is off. */
+async function refreshStyle($: EngineInterface): Promise<boolean> {
+  const path = await styleFlagPath($)
+  let isOn = false
+  if (path !== null && (await $.fs.exists(path).catch(() => false))) {
+    isOn = (await $.fs.read(path).catch(() => '')).trim().toLowerCase() === 'on'
+  }
+  if ((await read($, styleAtom)) !== isOn) await update($, styleAtom, () => isOn)
+  return isOn
+}
+
 /** Moves the countdown, refreshes the status line, and warns once per cache cycle. */
 async function tick($: EngineInterface, config: KeeperConfig): Promise<void> {
   const now = await $.clock.now()
   await update($, nowAtom, () => now)
   // Caveman is also switched by typed commands and by other sessions; the flag file is the truth.
   await refreshCaveman($)
+  if (await refreshStyleAvailable($, config)) await refreshStyle($)
   const view = await computeView($, config)
 
   if (view.phase !== 'cooling' || view.touchAt === null) return
@@ -228,6 +279,11 @@ async function saveNotes($: EngineInterface, config: KeeperConfig): Promise<void
     : undefined
   if (command) await $.command.run({ command })
   else await $.prompt.submit({ text: SAVE_PROMPT })
+}
+
+/** Asks where the work stands: the configured status prompt, else the built-in one. */
+async function askStatus($: EngineInterface, config: KeeperConfig): Promise<void> {
+  await $.prompt.submit({ text: config.statusPrompt.trim() || STATUS_PROMPT, asUser: true })
 }
 
 /** Starts the handoff turn; turn.complete captures its answer as the handoff text. */
@@ -324,6 +380,27 @@ async function toggleCaveman($: EngineInterface): Promise<void> {
   await $.fs.write(path, level)
   await update($, cavemanAtom, () => level)
   $.ui.toast(wasOn ? 'Caveman off from the next prompt.' : `Caveman on (${level}) from the next prompt.`)
+  // Both set the reply style: switching one on switches the other off.
+  if (!wasOn && (await refreshStyle($))) await toggleStyle($)
+}
+
+/**
+ * Flips the writing-rules flag file. While it is on, the prompt.submit hook attaches the
+ * configured rules to every prompt; the model hears of a flip to off with the next prompt.
+ */
+async function toggleStyle($: EngineInterface): Promise<void> {
+  const path = await styleFlagPath($)
+  if (path === null) {
+    $.ui.toast('session-band: cannot find the Claude Code configuration directory for the writing-rules flag.')
+    return
+  }
+  const wasOn = await refreshStyle($)
+  // Before the first prompt nothing is recorded yet: record the state the model started under.
+  if ((await read($, styleToldAtom)) === null) await update($, styleToldAtom, () => wasOn)
+  await $.fs.write(path, wasOn ? '' : 'on')
+  await update($, styleAtom, () => !wasOn)
+  $.ui.toast(wasOn ? 'Writing rules off from the next prompt.' : 'Writing rules on from the next prompt.')
+  if (!wasOn && (await refreshCaveman($)) !== '') await toggleCaveman($)
 }
 
 /**
@@ -358,14 +435,17 @@ export const register: Register = (on, options) => {
     handoffCommand: String(options.handoffCommand ?? 'anthropic-skills:context-handoff'),
     compactInstructions: String(options.compactInstructions ?? ''),
     saveCommand: String(options.saveCommand ?? ''),
+    statusPrompt: String(options.statusPrompt ?? ''),
+    styleRules: String(options.styleRules ?? '').trim(),
+    styleSkill: String(options.styleSkill ?? '').replace(/^\//, '').trim(),
     autoCompact: parseCompactSetting(String(options.autoCompact ?? 'auto')) ?? 'auto',
   }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'session-band',
-      description: 'Prompt-cache countdown and handoff: open, warm, compact, handoff, save notes, continue, caveman toggle',
-      argumentHint: '[open|warm|compact|handoff|save|continue|caveman|autocompact <250k|off|auto>]',
+      description: 'Prompt-cache countdown and handoff: open, warm, compact, handoff, save notes, continue, caveman and writing-rules toggles',
+      argumentHint: '[open|warm|compact|handoff|save|continue|caveman|style|autocompact <250k|off|auto>]',
     })
     if ((await read($, calibrationAtom)) === null) {
       const cost = (await $.session.usage()).cost?.usd
@@ -398,25 +478,42 @@ export const register: Register = (on, options) => {
     else if (verb === 'continue') runAction($, 'clear & continue', () => clearAndContinue($))
     else if (verb === 'open') await openPane($)
     else if (verb === 'caveman') await toggleCaveman($)
-    else return { text: 'Usage: /session-band [open|warm|compact|handoff|save|continue|caveman|autocompact <250k|off|auto>]' }
+    else if (verb === 'style') {
+      if (!(await refreshStyleAvailable($, config))) {
+        return { text: 'session-band: the writing-rules toggle is not available (no rules are set, or the skill named in styleSkill is not installed).' }
+      }
+      await toggleStyle($)
+    } else return { text: 'Usage: /session-band [open|warm|compact|handoff|save|continue|caveman|style|autocompact <250k|off|auto>]' }
 
     return { text: `session-band: ${verb}` }
   })
 
-  // Tells the model once when caveman flipped since it was last told, whoever flipped it:
-  // this band, another session's, or a typed command.
+  // Attaches the writing rules to every prompt while their toggle is on, and tells the model once
+  // when they or caveman flipped since it was last told, whoever flipped it: this band, another
+  // session's, or a typed command.
   on('prompt.submit', async ($, e, next) => {
-    let note: string | undefined
+    const notes: string[] = []
+    try {
+      const isStyleOn = (await refreshStyleAvailable($, config)) && (await refreshStyle($))
+      // The caveman plugin switches itself back on at every session start; the writing rules win while on.
+      if (isStyleOn && (await refreshCaveman($)) !== '') await toggleCaveman($)
+      const styleTold = await read($, styleToldAtom)
+      if (styleTold !== isStyleOn) await update($, styleToldAtom, () => isStyleOn)
+      if (isStyleOn) notes.push(STYLE_ON_NOTE + config.styleRules)
+      else if (styleTold === true) notes.push(STYLE_OFF_NOTE)
+    } catch {
+      // A flag that cannot be read must not hold up the prompt.
+    }
     try {
       const isOn = (await refreshCaveman($)) !== ''
       const told = await read($, cavemanToldAtom)
       if (told !== isOn) await update($, cavemanToldAtom, () => isOn)
-      if (told !== null && told !== isOn) note = isOn ? CAVEMAN_ON_NOTE : CAVEMAN_OFF_NOTE
+      if (told !== null && told !== isOn) notes.push(isOn ? CAVEMAN_ON_NOTE : CAVEMAN_OFF_NOTE)
     } catch {
       // A flag that cannot be read must not hold up the prompt.
     }
 
-    return next(note === undefined ? e : { ...e, context: [...(e.context ?? []), note] })
+    return next(notes.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...notes] })
   })
 
   on('turn.start', async ($, e, next) => {
@@ -595,6 +692,7 @@ export const register: Register = (on, options) => {
                 onPress={() => runAction($, 'handoff', () => startHandoff($, config))}
               />
               <Button key="save" label="📝 Save notes" onPress={() => runAction($, 'save', () => saveNotes($, config))} />
+              <Button key="status" label="🧭 Status" onPress={() => runAction($, 'status', () => askStatus($, config))} />
             </Box>
           </Box>
         )}
@@ -643,9 +741,33 @@ export const register: Register = (on, options) => {
     const hasActions = view.phase !== 'empty' && view.phase !== 'running' && handoff.status === 'idle'
     const isTerminal = e.surface === 'terminal'
     const isCavemanOn = Boolean(await read($, cavemanAtom))
+    const hasStyle = await read($, styleAvailableAtom)
+    const isStyleOn = hasStyle && (await read($, styleAtom))
     // Offered before the first reply too (the cheapest moment to switch), never while a turn runs.
     const family = view.phase !== 'running' && handoff.status === 'idle' ? modelFamily(view.model) : null
     const modelTarget = family === null ? null : MODEL_SWITCH[family]
+
+    const chips = [
+      ...bandChips(view),
+      ...(handoff.status === 'pending'
+        ? [{ text: 'handoff running…', tone: 'warn' as const, tip: 'Claude is writing the handoff note' }]
+        : []),
+    ]
+    // Each pill and button joins its own hover group; the matching tip is drawn over the pills while it is hovered.
+    const tips: { scope: string; text: string }[] = [
+      ...chips.map((chip, index) => ({ scope: `sb-chip-${index}`, text: chip.tip })),
+      ...(modelTarget ? [{ scope: 'sb-model', text: `Switch the model to ${modelTarget.to === 'opus' ? 'Opus 5.5' : 'Fable 5.1'}` }] : []),
+      { scope: 'sb-warm', text: '🔥 Keep warm: send a short turn that resets the cache timer' },
+      { scope: 'sb-compact', text: '📦 Compact now: run /compact with your instructions' },
+      { scope: 'sb-save', text: "📝 Save notes: update the project's working notes" },
+      { scope: 'sb-status', text: '🧭 Status: ask where we stand, where we left off and what is next' },
+      { scope: 'sb-handoff', text: '🤝 Handoff: write a note for a fresh session, then Clear & continue' },
+      { scope: 'sb-details', text: '📊 Details: cache TTL, limit resets, auto-compact settings' },
+      { scope: 'sb-caveman', text: `🪨 Caveman (terse replies) is ${isCavemanOn ? 'on: press to turn it off' : 'off: press to turn it on'}` },
+      ...(hasStyle
+        ? [{ scope: 'sb-style', text: `🧹 Writing rules (${config.styleSkill || 'from the mod settings'}) are ${isStyleOn ? 'on: press to turn them off' : 'off: press to turn them on'}` }]
+        : []),
+    ]
 
     // Figures on the left (growing to fill the row), buttons pinned to the right edge.
     // When both do not fit, the buttons wrap to a second row: overlapped by the pills they lose their clicks.
@@ -657,56 +779,102 @@ export const register: Register = (on, options) => {
           Terminal: a bordered box needs three rows and height={1} clips the text away, so the pills are
           plain text separated by a dim bar instead.
         */}
-        <Box flexDirection="row" flexGrow={1} flexShrink={1} gap={isTerminal ? 0 : 1}>
-          {[...bandChips(view), ...(handoff.status === 'pending' ? [{ text: 'handoff running…', tone: 'warn' as const }] : [])].map(
-            (chip, index) =>
-              isTerminal ? (
-                <Box flexDirection="row" flexShrink={0}>
-                  {index > 0 && <Text dimColor> │ </Text>}
-                  {TONE_DOT_COLOR[chip.tone] && <Text color={TONE_DOT_COLOR[chip.tone]}>● </Text>}
-                  <Text dimColor>{chip.text}</Text>
-                </Box>
-              ) : (
-                <Box flexDirection="row" flexShrink={0} borderStyle="round" borderDimColor paddingX={1} height={1}>
-                  {TONE_DOT_COLOR[chip.tone] && <Text color={TONE_DOT_COLOR[chip.tone]}>● </Text>}
-                  <Text dimColor>{chip.text}</Text>
-                </Box>
-              ),
+        <Box flexDirection="row" flexGrow={1} flexShrink={1} gap={isTerminal ? 0 : 1} position="relative">
+          {chips.map((chip, index) =>
+            isTerminal ? (
+              <Box flexDirection="row" flexShrink={0} hover={{ scope: `sb-chip-${index}` }}>
+                {index > 0 && <Text dimColor> │ </Text>}
+                {TONE_DOT_COLOR[chip.tone] && <Text color={TONE_DOT_COLOR[chip.tone]}>● </Text>}
+                <Text dimColor>{chip.text}</Text>
+              </Box>
+            ) : (
+              <Box
+                flexDirection="row"
+                flexShrink={0}
+                borderStyle="round"
+                borderDimColor
+                paddingX={1}
+                height={1}
+                hover={{ scope: `sb-chip-${index}` }}
+              >
+                {TONE_DOT_COLOR[chip.tone] && <Text color={TONE_DOT_COLOR[chip.tone]}>● </Text>}
+                <Text dimColor>{chip.text}</Text>
+              </Box>
+            ),
           )}
+          {/* Hidden until its group is hovered; absolute, so revealing it moves nothing and covers the pills. */}
+          {tips.map(tip => (
+            <Box
+              position="absolute"
+              top={0}
+              left={0}
+              width="100%"
+              display="none"
+              backgroundColor="text"
+              hover={{ scope: tip.scope, display: 'flex' }}
+            >
+              <Text color="inverseText"> {tip.text} </Text>
+            </Box>
+          ))}
         </Box>
-        {/* One-glyph buttons to save width; the Details pane carries the same actions with word labels. */}
+        {/* One-glyph buttons to save width; the hover tip and the Details pane spell out what each does. */}
         <Box flexDirection="row" flexShrink={0} gap={1}>
           {modelTarget && (
             <Button
               key="band-model"
               label={modelTarget.label}
+              hover={{ scope: 'sb-model' }}
               onPress={() => runAction($, 'model switch', () => switchModel($, config))}
             />
           )}
           {hasActions && view.phase !== 'cold' && (
-            <Button key="band-warm" label="🔥" onPress={() => runAction($, 'keep warm', () => keepWarm($))} />
+            <Button key="band-warm" label="🔥" hover={{ scope: 'sb-warm' }} onPress={() => runAction($, 'keep warm', () => keepWarm($))} />
           )}
           {hasActions && (
-            <Button key="band-compact" label="📦" onPress={() => runAction($, 'compact', () => compactNow($, config))} />
+            <Button
+              key="band-compact"
+              label="📦"
+              hover={{ scope: 'sb-compact' }}
+              onPress={() => runAction($, 'compact', () => compactNow($, config))}
+            />
           )}
           {hasActions && (
-            <Button key="band-save" label="📝" onPress={() => runAction($, 'save', () => saveNotes($, config))} />
+            <Button key="band-save" label="📝" hover={{ scope: 'sb-save' }} onPress={() => runAction($, 'save', () => saveNotes($, config))} />
+          )}
+          {hasActions && (
+            <Button
+              key="band-status"
+              label="🧭"
+              hover={{ scope: 'sb-status' }}
+              onPress={() => runAction($, 'status', () => askStatus($, config))}
+            />
           )}
           {hasActions && (
             <Button
               key="band-handoff"
               label="🤝"
+              hover={{ scope: 'sb-handoff' }}
               onPress={() => runAction($, 'handoff', () => startHandoff($, config))}
             />
           )}
-          <Button key="band-details" label="📊" onPress={() => runAction($, 'details', () => openPane($))} />
+          <Button key="band-details" label="📊" hover={{ scope: 'sb-details' }} onPress={() => runAction($, 'details', () => openPane($))} />
           {/* Shown in every phase: the toggle writes a flag file and submits nothing. */}
           <Button
             key="band-caveman"
             label={isCavemanOn ? '🪨 on' : '🪨 off'}
             dimColor={!isCavemanOn}
+            hover={{ scope: 'sb-caveman' }}
             onPress={() => runAction($, 'caveman toggle', () => toggleCaveman($))}
           />
+          {hasStyle && (
+            <Button
+              key="band-style"
+              label={isStyleOn ? '🧹 on' : '🧹 off'}
+              dimColor={!isStyleOn}
+              hover={{ scope: 'sb-style' }}
+              onPress={() => runAction($, 'writing-rules toggle', () => toggleStyle($))}
+            />
+          )}
         </Box>
       </Box>
     )

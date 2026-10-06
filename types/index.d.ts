@@ -29,6 +29,12 @@ declare module 'claude-code' {
       cavemanResume: string
       /** Whether caveman was on when the model was last told; null until a prompt or a toggle records it. */
       cavemanTold: boolean | null
+      /** The writing-rules toggle's flag as last read. */
+      style: boolean
+      /** Whether the writing rules were on when the model was last told; null until a prompt or a toggle records it. */
+      styleTold: boolean | null
+      /** Whether the writing-rules toggle is offered: rules are set and their skill is installed. */
+      styleAvailable: boolean
       /** The model id last seen on each side of the Fable ↔ Opus switch, so switching back restores it exactly. */
       modelSeen: { fable?: string; opus?: string }
     }

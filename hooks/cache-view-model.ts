@@ -16,6 +16,12 @@ export type KeeperConfig = {
   compactInstructions: string
   /** Skill the 📝 button runs to update the project's working notes; empty sends a built-in prompt. */
   saveCommand: string
+  /** Prompt the 🧭 button sends to ask where the work stands; empty sends a built-in prompt. */
+  statusPrompt: string
+  /** Writing rules the 🧹 toggle attaches to every prompt while on; empty hides the toggle. */
+  styleRules: string
+  /** Skill the rules belong to: the toggle shows only while it is installed; empty shows it always. */
+  styleSkill: string
 }
 
 /** empty: nothing cached yet · running: a turn keeps it warm · cooling: inside the warning window. */
@@ -83,7 +89,8 @@ export const TONE_DOT_COLOR: Record<ChipTone, string | undefined> = {
   neutral: undefined,
 }
 
-export type BandChip = { text: string; tone: ChipTone }
+/** One pill on the bar; `tip` is the line shown while the pointer is over it. */
+export type BandChip = { text: string; tone: ChipTone; tip: string }
 
 const PHASE_TONE: Record<CachePhase, ChipTone> = {
   empty: 'neutral',
@@ -94,6 +101,18 @@ const PHASE_TONE: Record<CachePhase, ChipTone> = {
 }
 
 const SHORT_LIMIT_LABEL: Record<string, string> = { five_hour: '5h', seven_day: 'wk' }
+const LIMIT_TIP: Record<string, string> = {
+  five_hour: 'What is left of the 5-hour usage limit',
+  seven_day: 'What is left of the weekly usage limit',
+}
+
+const CACHE_TIP: Record<CachePhase, string> = {
+  empty: 'Prompt cache: it starts with the first reply',
+  running: 'Prompt cache: a running turn keeps it warm',
+  warm: 'Prompt cache: time until it goes cold · cost to re-warm it if it does',
+  cooling: 'Prompt cache: about to go cold · cost to re-warm it if it does',
+  cold: 'Prompt cache is cold: the next prompt re-writes the whole context at about this cost',
+}
 
 /** Plenty left above half, getting low down to a fifth, nearly out below that. */
 const limitTone = (left: number): ChipTone => (left > 50 ? 'good' : left >= 20 ? 'warn' : 'bad')
@@ -121,9 +140,17 @@ function contextChip(view: KeeperView): BandChip {
   const tokens = `ctx ${formatTokens(view.contextTokens)}`
   const at = view.compact.at
   if (at === null) {
-    return { text: `${tokens}${view.contextPercent !== undefined ? ` ${view.contextPercent}%` : ''}`, tone: 'neutral' }
+    return {
+      text: `${tokens}${view.contextPercent !== undefined ? ` ${view.contextPercent}%` : ''}`,
+      tone: 'neutral',
+      tip: 'Context tokens · share of the context window (auto-compact is off)',
+    }
   }
-  return { text: `${tokens}/${formatTokens(at)}`, tone: view.contextTokens >= at * COMPACT_NEAR_SHARE ? 'warn' : 'neutral' }
+  return {
+    text: `${tokens}/${formatTokens(at)}`,
+    tone: view.contextTokens >= at * COMPACT_NEAR_SHARE ? 'warn' : 'neutral',
+    tip: 'Context tokens / the point where auto-compact runs',
+  }
 }
 
 /** The pane's auto-compact line: "Compacts at 300k (default for this model) · 84k to go", or why it won't. */
@@ -147,14 +174,20 @@ export const modelFamily = (model: string): ModelFamily | null =>
 export function bandChips(view: KeeperView): BandChip[] {
   const limits = view.rateLimits.map((limit): BandChip => {
     const left = percentLeft(limit)
-    return { text: `${SHORT_LIMIT_LABEL[limit.kind] ?? limit.kind} ${left}%`, tone: limitTone(left) }
+    return {
+      text: `${SHORT_LIMIT_LABEL[limit.kind] ?? limit.kind} ${left}%`,
+      tone: limitTone(left),
+      tip: LIMIT_TIP[limit.kind] ?? `What is left of the ${limit.kind} usage limit`,
+    }
   })
 
   return [
-    ...(view.model ? [{ text: shortModel(view.model), tone: 'neutral' as const }] : []),
-    { text: cacheChipText(view), tone: PHASE_TONE[view.phase] },
+    ...(view.model ? [{ text: shortModel(view.model), tone: 'neutral' as const, tip: 'Model running this session' }] : []),
+    { text: cacheChipText(view), tone: PHASE_TONE[view.phase], tip: CACHE_TIP[view.phase] },
     contextChip(view),
     ...limits,
-    ...(view.costUsd !== undefined ? [{ text: `session ${formatUsd(view.costUsd)}`, tone: 'neutral' as const }] : []),
+    ...(view.costUsd !== undefined
+      ? [{ text: `session ${formatUsd(view.costUsd)}`, tone: 'neutral' as const, tip: "This session's cost at API rates" }]
+      : []),
   ]
 }

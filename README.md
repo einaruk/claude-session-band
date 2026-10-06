@@ -1,7 +1,7 @@
 # claude-session-band
 
 A **mod** (function-hook plugin) for Claude Code, named `session-band`. It puts a one-line band right above the prompt that
-**tracks** your session (prompt cache, context, usage limits, cost) and **manages** it (keep warm, compact, handoff, model switch, save notes) in one click.
+**tracks** your session (prompt cache, context, usage limits, cost) and **manages** it (keep warm, compact, handoff, model switch, save notes, reply style) in one click.
 
 ![session-band: the band above the prompt (terminal)](docs/band.png)
 
@@ -29,7 +29,8 @@ This section is for a Claude Code agent installing the mod on the user's behalf.
 5. Tell the user to restart Claude Code; the band shows up after the first reply. In a new session, `/session-band` opens the details pane.
 6. Do not edit `settings.json`; the marketplace install is enough. If a step fails, show its output to the user verbatim and do not try another route.
 
-Optional dependency: the 🪨 button toggles the caveman plugin. Without it the button only writes a flag file and has no effect.
+Optional dependencies: the 🪨 button toggles the caveman plugin. Without it the button only writes a flag file and has no effect.
+The 🧹 button appears only while the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill is installed (`npx skills add einaruk/tr-sade-teknik-dil`).
 
 ### Alternative: from a local folder
 
@@ -54,7 +55,7 @@ Figures on the left, buttons on the right. The colored dot in front of a figure 
 | 4 | Limits | `5h 72%` · `wk 40%` | What is left of the 5-hour and weekly usage limits (shown on a subscription) |
 | 5 | Session cost | `session $3.20` | The session's cost at API rates |
 
-**Table 2 (v1.0) — Band buttons**
+**Table 2 (v1.1) — Band buttons**
 
 | # | Icon | What it does |
 |---|------|--------------|
@@ -62,20 +63,23 @@ Figures on the left, buttons on the right. The colored dot in front of a figure 
 | 2 | 🔥 | Keep warm: sends a short "ok" turn that resets the cache timer (hidden once the cache is cold) |
 | 3 | 📦 | Compact now: runs `/compact` with the configured instructions |
 | 4 | 📝 | Save notes: runs the skill set in `saveCommand`; when none is set, sends a prompt asking Claude to update the project's working notes |
-| 5 | 🤝 | Handoff: has Claude write a handoff note for a fresh session; when it is ready the band shows **Clear & continue** → `/clear` + the note sent as the first message |
-| 6 | 📊 | Details: opens the details pane (TTL, when limits reset, auto-compact −/+ buttons) |
-| 7 | 🪨 on/off | Toggles the caveman plugin (terse replies). Without the plugin it only writes a flag file and has no effect |
+| 5 | 🧭 | Status: sends the prompt set in `statusPrompt`; when none is set, asks where the work stands, where it was left off and what is next |
+| 6 | 🤝 | Handoff: has Claude write a handoff note for a fresh session; when it is ready the band shows **Clear & continue** → `/clear` + the note sent as the first message |
+| 7 | 📊 | Details: opens the details pane (TTL, when limits reset, auto-compact −/+ buttons) |
+| 8 | 🪨 on/off | Toggles the caveman plugin (terse replies). Without the plugin it only writes a flag file and has no effect |
+| 9 | 🧹 on/off | Toggles the writing rules set in `styleRules`. The default is a summary of the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill: plain technical language for Turkish and English. While on, the rules go with every prompt. Shown only while the skill named in `styleSkill` is installed. Exclusive with 🪨: switching one on switches the other off |
 
 Buttons hide while a turn runs and before the first reply (except the model switch and 📊).
 A toast warns `warnMinutes` (default 5) before the cache goes cold.
+Hovering a figure or a button shows a one-line description of it in the band.
 
-The same actions are available as a command: `/session-band [open|warm|compact|handoff|save|continue|caveman|autocompact <250k|off|auto>]`
+The same actions are available as a command: `/session-band [open|warm|compact|handoff|save|continue|caveman|style|autocompact <250k|off|auto>]`
 
 ## Settings
 
 `.claude-plugin/plugin.json` → `userConfig` (also editable from Claude Code's plugin settings):
 
-**Table 3 (v1.0) — Settings**
+**Table 3 (v1.1) — Settings**
 
 | # | Setting | Default | Note |
 |---|---------|---------|------|
@@ -85,11 +89,15 @@ The same actions are available as a command: `/session-band [open|warm|compact|h
 | 4 | `autoCompact` | `off` | `auto` = 300k on 1M-context models, 70% of smaller windows; or a fixed point such as `250k` |
 | 5 | `handoffCommand` | `anthropic-skills:context-handoff` | Falls back to a built-in handoff prompt when missing |
 | 6 | `saveCommand` | empty | Skill the 📝 button runs; empty sends a built-in prompt |
-| 7 | `compactInstructions` | "what to keep / what to drop" summary instructions | Passed as the argument to 📦 and to auto-compact |
+| 7 | `statusPrompt` | empty | Prompt the 🧭 button sends; empty sends a built-in English prompt |
+| 8 | `compactInstructions` | "what to keep / what to drop" summary instructions | Passed as the argument to 📦 and to auto-compact |
+| 9 | `styleRules` | summary of the tr-sade-teknik-dil rules | Text the 🧹 toggle attaches to every prompt while on; empty hides the toggle |
+| 10 | `styleSkill` | `tr-sade-teknik-dil` | The 🧹 toggle shows only while this skill is installed; empty shows it whenever rules are set |
 
 ## Credits and license
 
 Built on [etding/cache-keeper](https://github.com/etding/cache-keeper) (MIT, commit `6a2ba1b`) and adapted for personal use:
 model chip and Fable ↔ Opus switch, session cost chip, borderless rendering in the terminal, 📝 save notes button,
-🪨 caveman toggle, auto-compact off by default, custom compact instructions.
+🪨 caveman toggle, 🧭 status button, 🧹 writing-rules toggle, hover descriptions, auto-compact off by default,
+custom compact instructions.
 License: MIT; the original copyright line is kept in `LICENSE`.
