@@ -1,0 +1,11 @@
+{
+  "name": "session-band",
+  "owner": { "name": "einaruk" },
+  "plugins": [
+    {
+      "name": "session-band",
+      "source": ".",
+      "description": "Session band above the prompt: cache countdown, context, usage limits, cost; one-click keep warm, compact, handoff, model switch."
+    }
+  ]
+}

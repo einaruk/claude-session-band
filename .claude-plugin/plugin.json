@@ -1,0 +1,51 @@
+{
+  "name": "session-band",
+  "version": "0.1.0",
+  "description": "Prompt-cache countdown, cost to re-warm, usage limits, cold-cache warnings and one-click handoff → clear & continue.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "cacheTtl": {
+      "type": "string",
+      "title": "Prompt-cache TTL",
+      "description": "auto: 1h on a subscription, 5m otherwise, corrected by what the API actually served after a gap",
+      "default": "auto",
+      "options": ["auto", "1h", "5m"]
+    },
+    "warnMinutes": {
+      "type": "number",
+      "title": "Warn this many minutes before the cache goes cold",
+      "description": "A toast and a band above the prompt appear once the countdown drops below this",
+      "default": 5
+    },
+    "inputPricePerMTok": {
+      "type": "number",
+      "title": "Base input price, USD per million tokens (0 = auto)",
+      "description": "auto calibrates from the session's own cost ledger, falling back to list price",
+      "default": 0
+    },
+    "autoCompact": {
+      "type": "string",
+      "title": "Auto-compact point for every session",
+      "description": "auto: 300k tokens on 1M-context models, 70% of smaller windows (never below 100k). Or off, or a token count like 250k. A session can override it from the details pane or with /session-band autocompact <250k|off|auto>",
+      "default": "off"
+    },
+    "handoffCommand": {
+      "type": "string",
+      "title": "Slash command the Handoff button runs",
+      "description": "A skill or command name without the slash; when missing, a built-in handoff prompt is sent instead",
+      "default": "anthropic-skills:context-handoff"
+    },
+    "saveCommand": {
+      "type": "string",
+      "title": "Slash command the 📝 Save notes button runs",
+      "description": "Skill or command that updates your project's working notes, without the slash; empty or missing sends a built-in prompt instead",
+      "default": ""
+    },
+    "compactInstructions": {
+      "type": "string",
+      "title": "Instructions passed to every compaction",
+      "description": "Sent as /compact's argument by the 📦 button and by auto-compact; empty uses Claude Code's default summary",
+      "default": "Keep: (1) the goal and why; (2) decisions made and their reasons, rejected alternatives; (3) touched file paths, commands, IDs, URLs and version numbers verbatim; (4) current state: what is done, what is verified, what is half-done; (5) remaining work and the next step; (6) corrections and style preferences the user gave. Drop: raw tool output dumps, file contents already read and concluded on, details of failed attempts (keep only \"X did not work, because Y\"), repeated explanations. Mark anything uncertain with \"?\"; do not invent."
+    }
+  }
+}
