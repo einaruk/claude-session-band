@@ -1,6 +1,6 @@
 {
   "name": "session-band",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Prompt-cache countdown, cost to re-warm, usage limits, cold-cache warnings and one-click handoff → clear & continue.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -55,13 +55,13 @@
     },
     "styleRules": {
       "type": "string",
-      "title": "Writing rules the 🧹 toggle switches on",
+      "title": "Writing rules the ASD toggle switches on",
       "description": "Attached to every prompt while the toggle is on, and exclusive with caveman; empty hides the toggle. The default is a summary of the tr-sade-teknik-dil skill (Turkish and English)",
       "default": "Sade teknik dil (the rules of the tr-sade-teknik-dil skill). Apply them to all prose you write for the user: replies, reports, document text. Leave code, commands, quoted text and names as they are. Use the rules of the language you are writing in. (1) One action or claim per sentence. (2) Turkish: at most 18 words per sentence. English: at most 25. (3) Active voice with the actor as subject. Keep a passive only when the actor is unknown or irrelevant. (4) Simple tenses: no \"-mektedir\", \"-mış bulunmaktadır\", \"yapmış olduğu\"; no English present perfect. (5) No semicolons. (6) No \"olup\" and no converb chain (-ıp, -arak, -dıktan sonra) joining actions: split the sentence. (7) A verb, not a noun plus an empty verb: \"incele\", not \"incelemesini gerçekleştir\". (8) Plain words: no officialese (\"işbu\", \"tarafınıza\", \"akabinde\"), no idiomatic verbs (\"ayağa kaldır\", \"göz at\"), no marketing adjectives. (9) One verb for one action, used the same way throughout. (10) No dropped subject, object or verb. (11) Three or more steps or conditions go in a list. Keep every fact, condition, scope limit and number. Keep each hedge exactly as strong as it is (\"olabilir\", \"muhtemelen\", \"may\"). Keep the longer form when a shorter one loses precision. Do not announce or mention these rules."
     },
     "styleSkill": {
       "type": "string",
-      "title": "Skill the 🧹 writing rules belong to",
+      "title": "Skill the ASD writing rules belong to",
       "description": "The toggle shows only while this skill is installed (name without the slash); empty shows it whenever rules are set",
       "default": "tr-sade-teknik-dil"
     }

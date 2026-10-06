@@ -30,7 +30,7 @@ This section is for a Claude Code agent installing the mod on the user's behalf.
 6. Do not edit `settings.json`; the marketplace install is enough. If a step fails, show its output to the user verbatim and do not try another route.
 
 Optional dependencies: the 🪨 button toggles the caveman plugin. Without it the button only writes a flag file and has no effect.
-The 🧹 button appears only while the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill is installed (`npx skills add einaruk/tr-sade-teknik-dil`).
+The ASD button appears only while the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill is installed (`npx skills add einaruk/tr-sade-teknik-dil`).
 
 ### Alternative: from a local folder
 
@@ -67,7 +67,7 @@ Figures on the left, buttons on the right. The colored dot in front of a figure 
 | 6 | 🤝 | Handoff: has Claude write a handoff note for a fresh session; when it is ready the band shows **Clear & continue** → `/clear` + the note sent as the first message |
 | 7 | 📊 | Details: opens the details pane (TTL, when limits reset, auto-compact −/+ buttons) |
 | 8 | 🪨 on/off | Toggles the caveman plugin (terse replies). Without the plugin it only writes a flag file and has no effect |
-| 9 | 🧹 on/off | Toggles the writing rules set in `styleRules`. The default is a summary of the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill: plain technical language for Turkish and English. While on, the rules go with every prompt. Shown only while the skill named in `styleSkill` is installed. Exclusive with 🪨: switching one on switches the other off |
+| 9 | ASD on/off | Toggles the writing rules set in `styleRules`. The default is a summary of the [tr-sade-teknik-dil](https://github.com/einaruk/tr-sade-teknik-dil) skill: plain technical language for Turkish and English. While on, the rules go with every prompt. Shown only while the skill named in `styleSkill` is installed. Exclusive with 🪨: switching one on switches the other off |
 
 Buttons hide while a turn runs and before the first reply (except the model switch and 📊).
 A toast warns `warnMinutes` (default 5) before the cache goes cold.
@@ -91,13 +91,13 @@ The same actions are available as a command: `/session-band [open|warm|compact|h
 | 6 | `saveCommand` | empty | Skill the 📝 button runs; empty sends a built-in prompt |
 | 7 | `statusPrompt` | empty | Prompt the 🧭 button sends; empty sends a built-in English prompt |
 | 8 | `compactInstructions` | "what to keep / what to drop" summary instructions | Passed as the argument to 📦 and to auto-compact |
-| 9 | `styleRules` | summary of the tr-sade-teknik-dil rules | Text the 🧹 toggle attaches to every prompt while on; empty hides the toggle |
-| 10 | `styleSkill` | `tr-sade-teknik-dil` | The 🧹 toggle shows only while this skill is installed; empty shows it whenever rules are set |
+| 9 | `styleRules` | summary of the tr-sade-teknik-dil rules | Text the ASD toggle attaches to every prompt while on; empty hides the toggle |
+| 10 | `styleSkill` | `tr-sade-teknik-dil` | The ASD toggle shows only while this skill is installed; empty shows it whenever rules are set |
 
 ## Credits and license
 
 Built on [etding/cache-keeper](https://github.com/etding/cache-keeper) (MIT, commit `6a2ba1b`) and adapted for personal use:
 model chip and Fable ↔ Opus switch, session cost chip, borderless rendering in the terminal, 📝 save notes button,
-🪨 caveman toggle, 🧭 status button, 🧹 writing-rules toggle, hover descriptions, auto-compact off by default,
+🪨 caveman toggle, 🧭 status button, ASD writing-rules toggle, hover descriptions, auto-compact off by default,
 custom compact instructions.
 License: MIT; the original copyright line is kept in `LICENSE`.

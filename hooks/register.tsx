@@ -765,7 +765,7 @@ export const register: Register = (on, options) => {
       { scope: 'sb-details', text: '📊 Details: cache TTL, limit resets, auto-compact settings' },
       { scope: 'sb-caveman', text: `🪨 Caveman (terse replies) is ${isCavemanOn ? 'on: press to turn it off' : 'off: press to turn it on'}` },
       ...(hasStyle
-        ? [{ scope: 'sb-style', text: `🧹 Writing rules (${config.styleSkill || 'from the mod settings'}) are ${isStyleOn ? 'on: press to turn them off' : 'off: press to turn them on'}` }]
+        ? [{ scope: 'sb-style', text: `ASD writing rules (${config.styleSkill || 'from the mod settings'}) are ${isStyleOn ? 'on: press to turn them off' : 'off: press to turn them on'}` }]
         : []),
     ]
 
@@ -869,7 +869,7 @@ export const register: Register = (on, options) => {
           {hasStyle && (
             <Button
               key="band-style"
-              label={isStyleOn ? '🧹 on' : '🧹 off'}
+              label={isStyleOn ? 'ASD on' : 'ASD off'}
               dimColor={!isStyleOn}
               hover={{ scope: 'sb-style' }}
               onPress={() => runAction($, 'writing-rules toggle', () => toggleStyle($))}

@@ -18,7 +18,7 @@ export type KeeperConfig = {
   saveCommand: string
   /** Prompt the 🧭 button sends to ask where the work stands; empty sends a built-in prompt. */
   statusPrompt: string
-  /** Writing rules the 🧹 toggle attaches to every prompt while on; empty hides the toggle. */
+  /** Writing rules the ASD toggle attaches to every prompt while on; empty hides the toggle. */
   styleRules: string
   /** Skill the rules belong to: the toggle shows only while it is installed; empty shows it always. */
   styleSkill: string
